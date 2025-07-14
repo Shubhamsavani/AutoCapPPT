@@ -3,9 +3,11 @@ import os
 import shutil
 import uuid
 from datetime import datetime
-import atexit
 from concurrent.futures import ThreadPoolExecutor
 from main import PowerPointExtractor, convert_ppt_to_pptx, run_captioning_threaded
+import time
+
+
 
 # --- Constants ---
 BASE_SESSION_DIR = "session_data"
@@ -17,33 +19,54 @@ SESSION_ID_KEY = "session_id"
 st.set_page_config(page_title="AutoCapPPT", layout="centered")
 st.title("🧠 AutoCapPPT - AI-Powered Presentation Captioning")
 
+# --- Initialize Session State ---
+if SESSION_ID_KEY not in st.session_state:
+    st.session_state[SESSION_ID_KEY] = str(uuid.uuid4())
+
+if CAPTION_DONE_KEY not in st.session_state:
+    st.session_state[CAPTION_DONE_KEY] = False
+
+
+# --- Clean up old session folders ---
+def clean_old_sessions(base_dir="session_data", max_age_minutes=30):
+    now = time.time()
+    cutoff = now - (max_age_minutes * 60)
+
+    if os.path.exists(base_dir):
+        for folder in os.listdir(base_dir):
+            folder_path = os.path.join(base_dir, folder)
+            if os.path.isdir(folder_path):
+                try:
+                    modified_time = os.path.getmtime(folder_path)
+                    if modified_time < cutoff:
+                        shutil.rmtree(folder_path)
+                        print(f"🧹 Auto-removed old session folder: {folder_path}")
+                except Exception as e:
+                    print(f"⚠️ Error deleting old session folder {folder_path}: {e}")
+
+# Auto-cleanup old sessions
+clean_old_sessions(BASE_SESSION_DIR, max_age_minutes=30)
+
 # --- Cleanup Function ---
 def cleanup():
-    if SESSION_ID_KEY in st.session_state:
-        session_dir = os.path.join(BASE_SESSION_DIR, st.session_state[SESSION_ID_KEY])
+    session_id = st.session_state.get(SESSION_ID_KEY)
+    if session_id:
+        session_dir = os.path.join(BASE_SESSION_DIR, session_id)
         if os.path.exists(session_dir):
             try:
                 shutil.rmtree(session_dir)
                 print(f"🧹 Deleted session directory: {session_dir}")
             except Exception as e:
-                print(f"⚠️ Error while deleting session_data: {e}")
-    st.session_state.clear()
-
-# --- Register Cleanup on Exit ---
-atexit.register(cleanup)
-
-# --- Initialize Session State ---
-if SESSION_ID_KEY not in st.session_state:
-    st.session_state[SESSION_ID_KEY] = str(uuid.uuid4())
-    print(f"🧾 New session ID: {st.session_state[SESSION_ID_KEY]}")
-if CAPTION_DONE_KEY not in st.session_state:
-    st.session_state[CAPTION_DONE_KEY] = False
+                print(f"⚠️ Error during cleanup: {e}")
+    for key in [CAPTION_DONE_KEY, CAPTIONED_FILE_KEY, "uploaded_file"]:
+        if key in st.session_state:
+            del st.session_state[key]
 
 # --- Session Directory Path ---
 SESSION_DIR = os.path.join(BASE_SESSION_DIR, st.session_state[SESSION_ID_KEY])
 
 # --- Download Page ---
-if st.session_state[CAPTION_DONE_KEY]:
+if st.session_state.get(CAPTION_DONE_KEY):
     st.success("✅ Your presentation has been captioned.")
 
     if CAPTIONED_FILE_KEY in st.session_state and os.path.exists(st.session_state[CAPTIONED_FILE_KEY]):

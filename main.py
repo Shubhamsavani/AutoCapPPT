@@ -4,14 +4,21 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.dml.color import RGBColor
 from pptx.util import Inches, Pt
+from pptx.enum.text import MSO_AUTO_SIZE
 import argparse
 import subprocess
 import base64
 import requests
-from pptx.enum.text import MSO_AUTO_SIZE
 from concurrent.futures import ThreadPoolExecutor
+import subprocess
 
 executor = ThreadPoolExecutor(max_workers=4)  # Customize thread count per system
+
+def ensure_ollama_llava_running():
+    try:
+        subprocess.Popen(["ollama", "run", "llava"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    except Exception as e:
+        print(f"[ERROR] Couldn't launch Ollama LLaVA: {e}")
 
 def convert_ppt_to_pptx(filepath):
     soffice = r"C:\\Program Files\\LibreOffice\\program\\soffice.exe"
@@ -38,7 +45,7 @@ class PowerPointExtractor:
         image_bytes = image.blob
         name = name + f'_{self.cur_image_index}.{image.ext}'
         full_path = os.path.join(self.image_output_dir, os.path.basename(name))
-        print(full_path)
+        print(full_path) #printing to showcase multithreading
         with open(full_path, 'wb') as f:
             f.write(image_bytes)
         self.cur_image_index += 1
@@ -164,7 +171,7 @@ class PowerPointExtractor:
 
                 image_tuples = []
                 for shape in slide.shapes:
-                    print(f"Image position: {shape.top / 360000:.2f} cm")
+                    # print(f"Image position: {shape.top / 360000:.2f} cm")
                     image_tuples.extend(self.drill_for_images(shape, i + 1, image_name_part))
 
                 for image_file, shape in image_tuples:
@@ -201,6 +208,8 @@ def main():
 
     input_path = args.ppt
     session_dir = args.out
+
+    ensure_ollama_llava_running() # ensures that LLaVa is runnign already if not it will run it in new terminal
 
     if not os.path.exists(input_path):
         print(f"[❌] File not found: {input_path}")
